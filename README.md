@@ -1,30 +1,32 @@
-# 🏎️ VeloVoice: Premium AI Co-Pilot
+# README
 
-VeloVoice is a state-of-the-art, proactive AI assistant designed for next-generation electric vehicles. Inspired by Apple CarPlay aesthetics, it blends real-time navigation, vehicle telemetry (OBD-II), and intelligent voice interaction into a seamless driving experience.
+[Existing content of README.md]
 
-## ✨ Core Features
-- **🧠 Proactive AI Brain**: High-fidelity conversation and tool-calling powered by Gemini.
-- **🗺️ Real-Time Navigation**: Integrated MapLibre GL JS with traffic-aware routing and voice guidance.
-- **🩺 OBD-II Telemetry**: Live vehicle monitoring with proactive safety alerts (RPM, Battery, Motor Temp).
-- **🎙️ Hands-Free Activation**: Stable "Hey VeloVoice" wake-word detection with visual UI feedback.
-- **🎵 Media Sync**: Bluetooth-synced media controller with real-time progress and phone integration.
-- **🎨 Premium UX**: 60fps animations, semantic dark-mode design, and customizable AI personas.
 
-## 🛠️ Getting Started
-For detailed setup instructions and hardware list, please refer to:
-👉 **[REQUIREMENTS.md](./REQUIREMENTS.md)**
+## Contributing
 
-## 🚀 Quick Start
-1. **Setup Environment**: Add `GEMINI_API_KEY` to `backend/.env`.
-2. **Launch Backend**: `cd backend && npm run dev`
-3. **Launch Frontend**: `npm run dev` (from root)
+We welcome contributions from the community! To contribute:
+1. Fork the repository.
+2. Create a feature branch.
+3. Make your changes.
+4. Submit a pull request.
 
-## 🏗️ Architecture
-- **Frontend**: React, Zustand (State Management), Framer Motion (Animations), MapLibre (GPS).
-- **Backend**: Node.js, Express, WebSocket (Live Pipeline), Google GenAI (Gemini).
+## Contributors
 
-## 📄 License
+Thanks to all the contributors who helped improve this project:
+- [Contributor 1](link to profile)
+- [Contributor 2](link to profile)
+- [Contributor 3](link to profile)
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+## Acknowledgments
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+We would like to thank:
+- [Person/Organization Name](link)
+
+## Support
+
+For support, please open an issue or contact us at [support email].
+
+## License
+
+[License information]
