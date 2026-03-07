@@ -48,7 +48,7 @@ function resolveValue(key, telemetry) {
 }
 
 export default function VehicleStatusView() {
-    const { telemetry, vehicleProfile } = useVehicleStore();
+    const { telemetry, vehicleProfile, connection, telemetryMeta, isLimitedMode } = useVehicleStore();
 
     // Resolve the car type from the profile, fallback to EV
     const modelData = vehicleProfile?.data;
@@ -87,6 +87,12 @@ export default function VehicleStatusView() {
                     )}
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {(connection.state === 'connected' || connection.state === 'degraded') && (
+                        <span className="status-chip status-chip-connected">Connected</span>
+                    )}
+                    {isLimitedMode() && <span className="status-chip status-chip-limited">Limited Mode</span>}
+                    {telemetryMeta.isTelemetryStale && <span className="status-chip status-chip-stale">Telemetry Stale</span>}
+                    {telemetryMeta.telemetrySource === 'demo' && <span className="status-chip status-chip-demo">Demo Data</span>}
                     {/* Car type badge */}
                     <span style={{
                         background: `${typeColor}22`,

@@ -3,8 +3,18 @@ import { Power, Wind, Unlock, Sun, Thermometer, Battery, Snowflake, Zap } from '
 import useVehicleStore from '../store/useVehicleStore';
 
 export default function ControlsView() {
-    const { carFeatures, updateCarFeature, vehicleProfile } = useVehicleStore();
+    const {
+        carFeatures,
+        updateCarFeature,
+        vehicleProfile,
+        capabilities,
+        connection,
+        telemetryMeta,
+        canShowControl,
+        isLimitedMode
+    } = useVehicleStore();
     const profileFeatures = vehicleProfile?.data?.features || carFeatures;
+    const controlsEnabled = capabilities.supportsCarControls;
 
     const toggleControl = (key) => {
         updateCarFeature(key, !carFeatures[key]);
@@ -20,11 +30,14 @@ export default function ControlsView() {
         { key: 'ventilationSeats', icon: Snowflake, label: 'Seat Cooling', activeColor: '#0A84FF', featureFlag: 'ventilationSeats' },
     ];
 
-    // Only show controls that this vehicle supports
-    const visibleControls = ALL_CONTROLS.filter(c => profileFeatures[c.featureFlag] !== undefined);
-    const ControlButton = ({ icon: Icon, label, isActive, onClick, activeColor = 'var(--accent-color)' }) => (
+    // Only show controls that this vehicle supports and capability allows
+    const visibleControls = ALL_CONTROLS.filter(c => profileFeatures[c.featureFlag] !== undefined && canShowControl(c.key));
+    const ControlButton = ({ icon: Icon, label, isActive, onClick, activeColor = 'var(--accent-color)', disabled = false, testId }) => (
         <button
             onClick={onClick}
+            disabled={disabled}
+            data-testid={testId}
+            title={disabled ? 'Unavailable on current vehicle setup' : ''}
             style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -35,9 +48,10 @@ export default function ControlsView() {
                 aspectRatio: '1', /* Forces the button to be a square grid item */
                 borderRadius: 'var(--border-radius-md)',
                 border: 'none',
-                background: isActive ? activeColor : 'var(--surface-primary)',
+                background: disabled ? 'rgba(255,255,255,0.05)' : (isActive ? activeColor : 'var(--surface-primary)'),
                 color: isActive ? '#fff' : '#fff',
-                cursor: 'pointer',
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.65 : 1,
                 transition: 'transform 0.1s active',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
             }}
@@ -46,12 +60,22 @@ export default function ControlsView() {
         >
             <Icon size={32} color={isActive ? '#fff' : '#999'} />
             <span style={{ fontSize: '16px', fontWeight: '600' }}>{label}</span>
-            <span style={{ fontSize: '13px', opacity: isActive ? 1 : 0.5 }}>{isActive ? 'On' : 'Off'}</span>
+            <span style={{ fontSize: '13px', opacity: isActive ? 1 : 0.5 }}>
+                {disabled ? 'Unavailable' : (isActive ? 'On' : 'Off')}
+            </span>
         </button>
     );
 
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="status-chip-row">
+                {(connection.state === 'connected' || connection.state === 'degraded') && (
+                    <span className="status-chip status-chip-connected">Connected</span>
+                )}
+                {isLimitedMode() && <span className="status-chip status-chip-limited">Limited Mode</span>}
+                {telemetryMeta.isTelemetryStale && <span className="status-chip status-chip-stale">Telemetry Stale</span>}
+            </div>
+
             {/* Top Status Banner - CarPlay Style Cards */}
             <div className="auto-fit-grid">
                 <div style={{
@@ -106,7 +130,7 @@ export default function ControlsView() {
             </div>
 
             {/* Grid of Controls — filtered by vehicle profile */}
-            <div style={{
+            <div className="hide-scrollbar" style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(2, 1fr)',
                 gap: '16px',
@@ -115,7 +139,8 @@ export default function ControlsView() {
                 paddingBottom: '20px',
                 maxWidth: '500px',
                 margin: '0 auto',
-                width: '100%'
+                width: '100%',
+                overflowY: 'auto'
             }}>
                 {visibleControls.map(ctrl => (
                     <ControlButton
@@ -125,9 +150,17 @@ export default function ControlsView() {
                         isActive={ctrl.inverted ? !carFeatures[ctrl.key] : !!carFeatures[ctrl.key]}
                         onClick={() => toggleControl(ctrl.key)}
                         activeColor={ctrl.activeColor}
+                        disabled={!controlsEnabled}
+                        testId={`control-${ctrl.key}`}
                     />
                 ))}
             </div>
+
+            {!controlsEnabled && (
+                <div style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center' }}>
+                    Controls are unavailable for this vehicle profile.
+                </div>
+            )}
         </div>
     );
 }

@@ -15,6 +15,24 @@
   --border-radius-lg: 24px;
   --border-radius-md: 16px;
   --border-radius-sm: 12px;
+
+  /* Shared layering scale to prevent accidental overlap regressions. */
+  --z-base: 1;
+  --z-behind: -1;
+  --z-map-marker: 5;
+  --z-dashboard-overlay: 12;
+  --z-navigation: 40;
+  --z-orb: 70;
+  --z-dropdown-backdrop: 110;
+  --z-dropdown: 120;
+  --z-setup-overlay: 9998;
+  --z-startup-overlay: 9999;
+  --z-layer-0: 0;
+  --z-layer-1: 1;
+  --z-layer-2: 2;
+
+  --bp-compact: 900px;
+  --bp-mobile: 768px;
 }
 
 * {
@@ -79,6 +97,18 @@ body {
   }
 }
 
+/* Scrollbar Utilities */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Responsive App Layout */
 .app-container {
   display: flex;
@@ -98,14 +128,28 @@ body {
   align-items: center;
   padding: 20px 0;
   gap: 24px;
-  z-index: 100;
+  z-index: var(--z-navigation);
   justify-content: space-between;
+}
+
+.nav-item-btn {
+  min-width: 56px;
+  min-height: 56px;
 }
 
 .dock-items {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  flex: 1;
+  overflow-y: auto;
+  align-items: center;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.dock-items::-webkit-scrollbar {
+  display: none;
 }
 
 .dashboard-grid {
@@ -120,6 +164,76 @@ body {
   grid-row: span 3;
 }
 
+.map-view-shell {
+  border-radius: var(--border-radius-lg);
+}
+
+.map-center-marker {
+  z-index: var(--z-map-marker);
+}
+
+.weather-widget-main {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.weather-widget-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.orb-container {
+  position: absolute;
+  bottom: 32px;
+  right: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: var(--z-orb);
+  background: radial-gradient(circle at center, rgba(0, 0, 0, 0.4) 0%, transparent 70%);
+  transition: all 0.3s ease;
+}
+
+.startup-overlay {
+  z-index: var(--z-startup-overlay);
+}
+
+.startup-layer-0 {
+  z-index: var(--z-layer-0);
+}
+
+.startup-layer-1 {
+  z-index: var(--z-layer-1);
+}
+
+.startup-layer-2 {
+  z-index: var(--z-layer-2);
+}
+
+.setup-overlay {
+  z-index: var(--z-setup-overlay);
+}
+
+.settings-dropdown-backdrop {
+  z-index: var(--z-dropdown-backdrop);
+}
+
+.settings-dropdown-menu {
+  z-index: var(--z-dropdown);
+}
+
+.nav-glow-layer,
+.nav-listening-ring {
+  z-index: var(--z-behind);
+}
+
 /* Portrait / Square Display Media Query (e.g. Polestar, Volvo vertical screens) */
 @media (max-aspect-ratio: 4/3) {
   .app-container {
@@ -128,14 +242,15 @@ body {
 
   .nav-bar {
     width: 100%;
-    height: 90px;
+    height: 96px;
     border-right: none;
     border-top: 1px solid #1C1C1E;
     flex-direction: row;
-    padding: 0 20px;
+    padding: 0 12px;
+    gap: 8px;
   }
 
-  .nav-bar>div:first-child {
+  .nav-top-meta {
     display: none !important;
     /* hide clock/status on bottom dock to save horizontal space */
   }
@@ -143,13 +258,31 @@ body {
   .dock-items {
     flex-direction: row !important;
     width: 100%;
-    justify-content: space-around;
-    gap: 0 !important;
+    justify-content: space-between;
+    gap: 4px !important;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px 0;
   }
 
   /* Make the brand indicator sit cleanly on the tight bottom dock */
-  .nav-bar>div:last-child {
+  .nav-brand-indicator {
     margin-bottom: 0 !important;
+    flex-shrink: 0;
+    margin-left: 4px;
+  }
+
+  .nav-brand-indicator > div {
+    width: 42px !important;
+    height: 42px !important;
+  }
+
+  .nav-item-btn {
+    min-width: 48px;
+    min-height: 48px;
+    padding: 10px !important;
+    border-radius: 12px;
   }
 
   .dashboard-grid {
@@ -183,4 +316,247 @@ body {
   gap: 20px;
   flex: 1;
   min-height: 0;
+}
+
+button,
+[role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.status-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  border: 1px solid transparent;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+  min-height: 24px;
+}
+
+.status-chip-connected {
+  color: #34C759;
+  background: rgba(52, 199, 89, 0.14);
+  border-color: rgba(52, 199, 89, 0.3);
+}
+
+.status-chip-limited {
+  color: #FF9500;
+  background: rgba(255, 149, 0, 0.14);
+  border-color: rgba(255, 149, 0, 0.28);
+}
+
+.status-chip-stale {
+  color: #FF3B30;
+  background: rgba(255, 59, 48, 0.14);
+  border-color: rgba(255, 59, 48, 0.28);
+}
+
+.status-chip-demo {
+  color: #5AC8FA;
+  background: rgba(90, 200, 250, 0.14);
+  border-color: rgba(90, 200, 250, 0.28);
+}
+
+.global-telemetry-strip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.dashboard-chip-stack {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  max-width: min(60%, 420px);
+  justify-content: flex-end;
+  z-index: var(--z-dashboard-overlay);
+  pointer-events: none;
+}
+
+.dashboard-alert-ticker {
+  position: absolute;
+  top: 80px;
+  left: 16px;
+  right: 16px;
+  max-width: 340px;
+  background: rgba(28, 28, 30, 0.9);
+  border-radius: 12px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: var(--z-dashboard-overlay);
+}
+
+.settings-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  overflow-y: auto;
+  padding-right: 12px;
+}
+
+.phone-grid {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
+}
+
+.phone-sidebar {
+  background: #1c1c1e;
+  border-radius: 20px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.phone-main {
+  background: #1c1c1e;
+  border-radius: 20px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.demo-script-btn {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.demo-script-btn:hover {
+  border-color: rgba(90, 200, 250, 0.5);
+  background: rgba(90, 200, 250, 0.16);
+}
+
+@media (max-width: 900px) {
+  .map-view-shell {
+    border-radius: var(--border-radius-md);
+  }
+
+  .weather-widget-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .weather-widget-metrics {
+    padding-left: 0;
+    border-left: none;
+  }
+
+  .status-chip {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .global-telemetry-strip {
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .dashboard-chip-stack {
+    max-width: calc(100% - 32px);
+    right: 16px;
+    left: 16px;
+    justify-content: flex-start;
+  }
+
+  .dashboard-alert-ticker {
+    max-width: calc(100% - 32px);
+  }
+
+  .dashboard-alert-ticker > div:last-child {
+    min-width: 0;
+  }
+
+  .demo-script-btn {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  .phone-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .phone-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    padding: 10px;
+  }
+
+  .settings-root {
+    gap: 20px;
+    padding-right: 0;
+  }
+}
+
+@media (max-aspect-ratio: 4/3) {
+  .orb-container {
+    bottom: 106px;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(240px, 1.3fr) auto auto auto;
+  }
+
+  .nav-bar {
+    height: 82px;
+    padding: 0 14px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr);
+    gap: 20px;
+  }
+
+  .status-chip {
+    font-size: 13px;
+    padding: 5px 12px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 2.5fr) minmax(0, 1.4fr);
+    gap: 24px;
+  }
+
+  .nav-bar {
+    width: 108px;
+  }
 }

@@ -27,11 +27,11 @@ export default function NavigationBar() {
     ];
 
     return (
-        <aside className="nav-bar">
+        <aside className="nav-bar" data-testid="nav-bar">
             {/* Top: Time and Status */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+            <div className="nav-top-meta" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '18px', fontWeight: '600', color: '#fff' }}>{formatTime(time)}</span>
-                <div style={{ display: 'flex', gap: '2px', height: '12px', alignItems: 'flex-end', opacity: 0.6 }}>
+                <div className="nav-signal-bars" style={{ display: 'flex', gap: '2px', height: '12px', alignItems: 'flex-end', opacity: 0.6 }}>
                     <div style={{ width: '3px', height: '4px', background: '#fff', borderRadius: '1px' }}></div>
                     <div style={{ width: '3px', height: '6px', background: '#fff', borderRadius: '1px' }}></div>
                     <div style={{ width: '3px', height: '9px', background: '#fff', borderRadius: '1px' }}></div>
@@ -48,6 +48,8 @@ export default function NavigationBar() {
                         <button
                             key={item.id}
                             onClick={() => setActiveView(item.id)}
+                            data-testid={`nav-${item.id}`}
+                            className="nav-item-btn"
                             style={{
                                 background: 'none',
                                 border: 'none',
@@ -62,12 +64,12 @@ export default function NavigationBar() {
                             {isActive && (
                                 <motion.div
                                     layoutId="nav-glow"
+                                    className="nav-glow-layer"
                                     style={{
                                         position: 'absolute',
                                         inset: 0,
                                         background: 'rgba(255,255,255,0.1)',
-                                        borderRadius: '12px',
-                                        zIndex: -1
+                                        borderRadius: '12px'
                                     }}
                                 />
                             )}
@@ -82,7 +84,7 @@ export default function NavigationBar() {
             </div>
 
             {/* Bottom: VeloVoice Brand / Wake Indicator */}
-            <div style={{ position: 'relative', marginBottom: '10px' }}>
+            <div className="nav-brand-indicator" style={{ position: 'relative', marginBottom: '10px' }}>
                 <AnimatePresence>
                     {status === 'listening' && (
                         <motion.div
@@ -90,13 +92,13 @@ export default function NavigationBar() {
                             animate={{ scale: [1, 1.5, 1], opacity: [0.4, 0.8, 0.4] }}
                             exit={{ scale: 0.5, opacity: 0 }}
                             transition={{ duration: 2, repeat: Infinity }}
+                            className="nav-listening-ring"
                             style={{
                                 position: 'absolute',
                                 inset: -10,
                                 borderRadius: '50%',
                                 border: '2px solid var(--accent-color)',
-                                boxShadow: '0 0 15px var(--accent-color)',
-                                zIndex: -1
+                                boxShadow: '0 0 15px var(--accent-color)'
                             }}
                         />
                     )}

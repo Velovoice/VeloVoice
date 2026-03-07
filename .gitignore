@@ -45,10 +45,29 @@ __pycache__/
 /test-results/
 /playwright-report/
 /blob-report/
+/playwright/.cache/
+/playwright/.auth/
+playwright/.cache/
+playwright/.auth/
 coverage/
 .nyc_output/
+.coverage
+htmlcov/
+
+# Generated artifacts
+*.tmp
+*.temp
+*.pid
+*.seed
+*.tsbuildinfo
+
+# Test and debug output
+trace.zip
+*.trace
+*.snap
 
 # Build caches
 .vite/
 .eslintcache
 .stylelintcache
+.cache/

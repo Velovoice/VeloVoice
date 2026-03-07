@@ -3,13 +3,34 @@ import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
 import { processVoiceCommand } from './llm.js';
+import { normalizeTelemetryPayload } from './telemetry.js';
+import {
+    MAX_WS_MESSAGES_PER_MIN,
+    checkAndTrackRateLimit,
+    sanitizeLanguage,
+    sanitizePersona,
+    sanitizeTranscript,
+    sanitizeType
+} from './wsGuards.js';
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
-app.use(cors());
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+            callback(null, true);
+            return;
+        }
+        callback(new Error('CORS origin denied'));
+    }
+}));
 app.use(express.json());
 
 // Basic health check route
@@ -26,25 +47,48 @@ const server = app.listen(port, () => {
 const wss = new WebSocketServer({ server });
 
 // OBD-II Configuration
-const POLL_INTERVAL_MS = 2000;
+const DEFAULT_POLL_INTERVAL_MS = 2000;
+const POLL_MIN_MS = 1000;
+const POLL_MAX_MS = 10000;
+const pollFromEnv = Number.parseInt(process.env.OBD_POLL_INTERVAL_MS || `${DEFAULT_POLL_INTERVAL_MS}`, 10);
+const POLL_INTERVAL_MS = Math.min(POLL_MAX_MS, Math.max(POLL_MIN_MS, Number.isFinite(pollFromEnv) ? pollFromEnv : DEFAULT_POLL_INTERVAL_MS));
+const TELEMETRY_RESPONSE_TIMEOUT_MS = 3500;
 const REDLINE_RPM = 4000;
 const LOW_BATTERY_PCT = 15;
 
-let obdPollingSession = null;
-
-function startOBDPolling(ws) {
-    if (obdPollingSession) clearInterval(obdPollingSession);
+function startOBDPolling(ws, state) {
+    if (state.pollingSession) clearInterval(state.pollingSession);
     console.log('🔌 Starting Continuous OBD-II Polling...');
 
-    obdPollingSession = setInterval(() => {
+    state.pollingSession = setInterval(() => {
         if (ws.readyState !== ws.OPEN) {
-            clearInterval(obdPollingSession);
+            clearInterval(state.pollingSession);
             return;
         }
 
+        const requestId = `obd-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        state.pendingRequestId = requestId;
+
+        if (state.pendingTimeout) {
+            clearTimeout(state.pendingTimeout);
+        }
+
+        state.pendingTimeout = setTimeout(() => {
+            if (state.pendingRequestId === requestId && ws.readyState === ws.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'system_notice',
+                    code: 'telemetry_timeout',
+                    message: 'Telemetry response timed out.'
+                }));
+                state.pendingRequestId = null;
+            }
+        }, TELEMETRY_RESPONSE_TIMEOUT_MS + 200);
+
         ws.send(JSON.stringify({
             type: 'system_request',
-            action: 'poll_obd'
+            action: 'poll_obd',
+            requestId,
+            timeoutMs: TELEMETRY_RESPONSE_TIMEOUT_MS
         }));
     }, POLL_INTERVAL_MS);
 }
@@ -70,7 +114,21 @@ function monitorVehicleHealth(ws, telemetry, personaSpeak) {
     }
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+        const origin = req?.headers?.origin;
+        if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+            ws.close(1008, 'Origin not allowed');
+            return;
+        }
+
+        const connectionState = {
+            pollingSession: null,
+            pendingRequestId: null,
+            pendingTimeout: null,
+            lastTelemetryAt: null
+        };
+        const messageWindow = [];
+
     console.log('⚡ Frontend connected to Brain via WebSocket');
 
     // Store persona per connection (updated when client sends it)
@@ -88,25 +146,13 @@ wss.on('connection', (ws) => {
         return prefix + text;
     }
 
-    startOBDPolling(ws);
+    startOBDPolling(ws, connectionState);
 
     // Send initial greeting
     ws.send(JSON.stringify({
         type: 'system',
         message: 'Connected to Co-Pilot Brain'
     }));
-
-    // --- PROACTIVE INTELLIGENCE: Low Tire Pressure Alert (15s after connect) ---
-    setTimeout(() => {
-        if (ws.readyState === ws.OPEN) {
-            console.log('📢 Sending proactive alert: Low Tire Pressure');
-            ws.send(JSON.stringify({
-                type: 'ai_response',
-                text: personaSpeak("your rear left tire pressure is reading lower than optimal. I recommend a quick inspection at the nearest station."),
-                actions: [{ tool: 'get_vehicle_status', args: {} }]
-            }));
-        }
-    }, 15000);
 
     // Dynamic Navigation Engine & Persona State
     let navigationSession = null;
@@ -116,26 +162,64 @@ wss.on('connection', (ws) => {
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
-            console.log('Received from Frontend:', data);
+            const now = Date.now();
+            const isRateLimited = checkAndTrackRateLimit(messageWindow, now, MAX_WS_MESSAGES_PER_MIN, 60000);
+            if (isRateLimited) {
+                ws.send(JSON.stringify({
+                    type: 'system_notice',
+                    code: 'rate_limited',
+                    message: 'Too many messages. Please slow down.'
+                }));
+                return;
+            }
 
-            if (data.type === 'persona_sync') {
+            if (!data || typeof data !== 'object') {
+                ws.send(JSON.stringify({
+                    type: 'system_notice',
+                    code: 'invalid_payload',
+                    message: 'Message payload must be a JSON object.'
+                }));
+                return;
+            }
+
+            const msgType = sanitizeType(data.type);
+            if (!msgType) {
+                ws.send(JSON.stringify({
+                    type: 'system_notice',
+                    code: 'invalid_type',
+                    message: 'Unsupported message type.'
+                }));
+                return;
+            }
+
+            if (msgType === 'persona_sync') {
                 // Client announcing their persona at connect time
-                activePersona = data.persona || 'Samantha';
-                activeLanguage = data.language || 'en-US';
+                activePersona = sanitizePersona(data.persona, activePersona);
+                activeLanguage = sanitizeLanguage(data.language, activeLanguage);
                 console.log(`🎭 Persona: ${activePersona} | 🌍 Lang: ${activeLanguage}`);
 
-            } else if (data.type === 'transcript') {
+            } else if (msgType === 'transcript') {
                 // Update persona and language for this connection if client sent one
-                if (data.persona) activePersona = data.persona;
-                if (data.language) activeLanguage = data.language;
+                activePersona = sanitizePersona(data.persona, activePersona);
+                activeLanguage = sanitizeLanguage(data.language, activeLanguage);
 
-                console.log(`💬 Voice Command [${activeLanguage}]: "${data.text}"`);
-                const llmResult = await processVoiceCommand(data.text, activePersona, activeLanguage);
+                const sanitizedText = sanitizeTranscript(data.text);
+                if (!sanitizedText) {
+                    ws.send(JSON.stringify({
+                        type: 'system_notice',
+                        code: 'invalid_text',
+                        message: 'Voice transcript must be a non-empty string.'
+                    }));
+                    return;
+                }
+
+                console.log(`💬 Voice Command received [${activeLanguage}] (${sanitizedText.length} chars)`);
+                const llmResult = await processVoiceCommand(sanitizedText, activePersona, activeLanguage);
 
                 // Start Nav Engine if 'navigate' tool was called
                 if (llmResult.actions.some(a => a.tool === 'navigate')) {
                     const navAction = llmResult.actions.find(a => a.tool === 'navigate');
-                    startNavigationEngine(ws, navAction.args.destination, navigationSession);
+                    navigationSession = startNavigationEngine(ws, navAction.args.destination, navigationSession);
                 }
 
                 // Send response back to Frontend Over WebSocket
@@ -144,16 +228,54 @@ wss.on('connection', (ws) => {
                     text: llmResult.text,
                     actions: llmResult.actions // Array of tool calls (e.g. {tool: 'navigate', args: {destination: 'work'}})
                 }));
-            } else if (data.type === 'telemetry') {
-                monitorVehicleHealth(ws, data.data, personaSpeak);
+            } else if (msgType === 'telemetry' || msgType === 'telemetry_response') {
+                const telemetry = normalizeTelemetryPayload(data);
+
+                if (!telemetry) {
+                    ws.send(JSON.stringify({
+                        type: 'system_notice',
+                        code: 'telemetry_invalid_payload',
+                        message: 'Telemetry payload missing required object data.'
+                    }));
+                    return;
+                }
+
+                if (data.requestId && data.requestId === connectionState.pendingRequestId) {
+                    connectionState.pendingRequestId = null;
+                    if (connectionState.pendingTimeout) {
+                        clearTimeout(connectionState.pendingTimeout);
+                        connectionState.pendingTimeout = null;
+                    }
+                }
+
+                connectionState.lastTelemetryAt = Date.now();
+                monitorVehicleHealth(ws, telemetry, personaSpeak);
             }
 
         } catch (error) {
-            console.error('Error parsing message:', error);
+            console.error('Error parsing message:', error?.message || 'unknown message error');
+        }
+    });
+
+    ws.on('error', (error) => {
+        console.error('WebSocket error:', error?.message || 'unknown ws error');
+        if (connectionState.pollingSession) {
+            clearInterval(connectionState.pollingSession);
+            connectionState.pollingSession = null;
+        }
+        if (connectionState.pendingTimeout) {
+            clearTimeout(connectionState.pendingTimeout);
+            connectionState.pendingTimeout = null;
         }
     });
 
     ws.on('close', () => {
+        if (connectionState.pollingSession) {
+            clearInterval(connectionState.pollingSession);
+        }
+        if (connectionState.pendingTimeout) {
+            clearTimeout(connectionState.pendingTimeout);
+        }
         console.log('❌ Frontend disconnected');
     });
 });
@@ -197,4 +319,6 @@ function startNavigationEngine(ws, destination, existingSession) {
             clearInterval(session);
         }
     }, 12000); // 12s per milestone for demo
+
+    return session;
 }

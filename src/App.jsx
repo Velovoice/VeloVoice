@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NavigationBar from './components/NavigationBar';
 import DashboardView from './views/DashboardView';
@@ -10,13 +10,19 @@ import StartupView from './views/StartupView';
 import SetupWizard from './views/SetupWizard';
 import Orb from './components/Orb';
 import { useCoPilot } from './hooks/useCoPilot';
+import { bluetoothManager } from './utils/BluetoothManager';
 
 import useVehicleStore from './store/useVehicleStore';
+
+const isE2EMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('e2e') === '1';
 
 export default function App() {
     // Industrial State Store
     const {
         isBooting, setIsBooting,
+        demoModeEnabled,
+        setDemoModeEnabled,
+        demoScriptRunId,
         activeView, setActiveView,
         accentColor,
         aiPersona,
@@ -25,12 +31,103 @@ export default function App() {
         setNavigation,
         carFeatures, updateCarFeature,
         telemetry,
+        updateTelemetry,
+        telemetryMeta,
+        markTelemetryFresh,
+        markTelemetryStale,
+        setTelemetrySource,
+        setConnectionState,
+        setConnectionError,
         media, updateMedia,
-        isSetupComplete
+        isSetupComplete,
+        triggerDemoScript,
+        connection
     } = useVehicleStore();
 
+    const telemetryTimeoutRef = useRef(null);
+    const demoTickRef = useRef(0);
+    const demoScriptTimeoutsRef = useRef([]);
+
+    const nextDemoRPM = useCallback(() => {
+        demoTickRef.current += 1;
+        // Deterministic waveform for repeatable pitch demos.
+        const wave = Math.sin(demoTickRef.current / 3);
+        return Math.round(1200 + (wave * 450));
+    }, []);
+
+    const handleSystemRequest = useCallback(async (request, reply) => {
+        if (request?.action !== 'poll_obd') {
+            return;
+        }
+
+        let payload = telemetry;
+        let source = telemetryMeta.telemetrySource || 'demo';
+        let fresh = true;
+
+        if (demoModeEnabled) {
+            const rpm = nextDemoRPM();
+            payload = {
+                ...telemetry,
+                rpm
+            };
+            updateTelemetry({ rpm });
+            source = 'demo';
+            setDemoModeEnabled(true);
+            setConnectionState('disconnected');
+        } else if (bluetoothManager.isConnected) {
+            try {
+                const live = await bluetoothManager.queryBasicTelemetry();
+                const nextTelemetry = {
+                    ...telemetry,
+                    rpm: Math.round(live.rpm ?? telemetry.rpm),
+                    speed: Math.round(live.speed ?? telemetry.speed),
+                    motorTemp: Math.round(live.coolantTemp ?? telemetry.motorTemp),
+                    battery: Math.round(live.fuelLevel ?? telemetry.battery)
+                };
+                payload = {
+                    ...nextTelemetry
+                };
+                updateTelemetry(nextTelemetry);
+                source = 'live';
+                setConnectionState('connected');
+            } catch (error) {
+                fresh = false;
+                source = 'estimated';
+                setConnectionError(error?.message || 'Unable to read OBD telemetry');
+            }
+        } else {
+            source = 'estimated';
+            fresh = false;
+        }
+
+        reply({
+            type: 'telemetry_response',
+            requestId: request.requestId || null,
+            data: payload,
+            meta: { source }
+        });
+
+        setTelemetrySource(source);
+        if (fresh) {
+            markTelemetryFresh(source);
+        } else {
+            markTelemetryStale();
+        }
+
+        if (telemetryTimeoutRef.current) {
+            clearTimeout(telemetryTimeoutRef.current);
+        }
+
+        const timeoutMs = Number.isFinite(request.timeoutMs) ? request.timeoutMs : 3500;
+        telemetryTimeoutRef.current = setTimeout(() => {
+            markTelemetryStale();
+        }, timeoutMs);
+    }, [demoModeEnabled, markTelemetryFresh, markTelemetryStale, nextDemoRPM, setConnectionError, setConnectionState, setDemoModeEnabled, setTelemetrySource, telemetry, telemetryMeta.telemetrySource, updateTelemetry]);
+
     // Connect to the Co-Pilot Backend
-    const { status: copilotStatus, toggleListening, actions, clearActions, send } = useCoPilot(aiPersona, language);
+    const { status: copilotStatus, toggleListening, actions, clearActions } = useCoPilot(aiPersona, language, {
+        onSystemRequest: handleSystemRequest
+    });
 
     // --- 🎯 AI ACTION ORCHESTRATOR ---
     // Decodes co-pilot tool calls into frontend state transformations
@@ -109,18 +206,109 @@ export default function App() {
         );
     }, [accentColor]);
 
-    // Telemetry Bridge: Respond to backend polling requests
     React.useEffect(() => {
-        const handleSyncRequest = () => {
-            console.log('📤 Syncing Telemetry to Backend');
-            send({
-                type: 'telemetry',
-                data: telemetry
-            });
+        if (isE2EMode && isBooting) {
+            setIsBooting(false);
+        }
+    }, [isBooting, setIsBooting]);
+
+    // If backend is disconnected, mark telemetry stale for UI clarity.
+    React.useEffect(() => {
+        if (copilotStatus === 'disconnected') {
+            markTelemetryStale();
+        }
+    }, [copilotStatus, markTelemetryStale]);
+
+    React.useEffect(() => () => {
+        if (telemetryTimeoutRef.current) {
+            clearTimeout(telemetryTimeoutRef.current);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        let cancelled = false;
+
+        const attemptReconnect = async () => {
+            if (!connection.autoReconnect || !connection.preferredDeviceId || demoModeEnabled) {
+                return;
+            }
+
+            if (bluetoothManager.isConnected) {
+                return;
+            }
+
+            try {
+                setConnectionState('discovering');
+                await bluetoothManager.connectPreferred(connection.preferredDeviceId);
+                if (!cancelled) {
+                    setConnectionState('connected');
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    setConnectionError(error?.message || 'Auto reconnect failed');
+                }
+            }
         };
-        window.addEventListener('request_telemetry_sync', handleSyncRequest);
-        return () => window.removeEventListener('request_telemetry_sync', handleSyncRequest);
-    }, [telemetry, send]);
+
+        attemptReconnect();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [connection.autoReconnect, connection.preferredDeviceId, demoModeEnabled, setConnectionError, setConnectionState]);
+
+    // One-click deterministic pitch sequence for demo rehearsals.
+    React.useEffect(() => {
+        if (!demoScriptRunId) {
+            return;
+        }
+
+        demoScriptTimeoutsRef.current.forEach(clearTimeout);
+        demoScriptTimeoutsRef.current = [];
+
+        setDemoModeEnabled(true);
+        setActiveView('home');
+        setNavigation({
+            destination: 'Airport',
+            isNavigating: true,
+            nextStep: 'Head north for 200m',
+            lastAlert: 'Route loaded. Smooth traffic ahead.',
+            alertType: 'info'
+        });
+        updateMedia({
+            track: 'Pitch Drive Theme',
+            artist: 'VeloVoice Demo',
+            isPlaying: true,
+            progress: 30
+        });
+
+        const stageTwo = setTimeout(() => {
+            updateTelemetry({ rpm: 1480, speed: 42, battery: 82 });
+            setTelemetrySource('demo');
+            markTelemetryFresh('demo');
+        }, 1600);
+
+        const stageThree = setTimeout(() => {
+            setNavigation({
+                nextStep: 'Take the next left in 50m',
+                lastAlert: 'Moderate traffic detected. Re-routing for faster ETA.',
+                alertType: 'traffic'
+            });
+            setActiveView('status');
+        }, 4000);
+
+        const stageFour = setTimeout(() => {
+            setActiveView('home');
+            updateMedia({ progress: 55 });
+        }, 6400);
+
+        demoScriptTimeoutsRef.current.push(stageTwo, stageThree, stageFour);
+
+        return () => {
+            demoScriptTimeoutsRef.current.forEach(clearTimeout);
+            demoScriptTimeoutsRef.current = [];
+        };
+    }, [demoScriptRunId, markTelemetryFresh, setActiveView, setDemoModeEnabled, setNavigation, setTelemetrySource, updateMedia, updateTelemetry]);
 
     // Media Progress Simulator
     React.useEffect(() => {
@@ -138,7 +326,7 @@ export default function App() {
     return (
         <>
             <AnimatePresence>
-                {isBooting && <StartupView onFinish={() => setIsBooting(false)} />}
+                {!isE2EMode && isBooting && <StartupView onFinish={() => setIsBooting(false)} />}
             </AnimatePresence>
 
             {/* Setup Wizard — shown after boot if first launch */}
@@ -159,6 +347,20 @@ export default function App() {
                     flexDirection: 'column',
                     overflow: 'hidden'
                 }}>
+                    <div className="global-telemetry-strip">
+                        <span className={`status-chip ${telemetryMeta.telemetrySource === 'live' ? 'status-chip-connected' : telemetryMeta.telemetrySource === 'demo' ? 'status-chip-demo' : 'status-chip-limited'}`}>
+                            Telemetry: {telemetryMeta.telemetrySource === 'live' ? 'Live' : telemetryMeta.telemetrySource === 'demo' ? 'Demo' : 'Estimated'}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={triggerDemoScript}
+                            className="demo-script-btn"
+                            data-testid="run-demo-script"
+                        >
+                            Run Demo Script
+                        </button>
+                    </div>
+
                     <div style={{ flex: 1, position: 'relative' }}>
                         <AnimatePresence mode="wait">
                             <motion.div
@@ -178,10 +380,12 @@ export default function App() {
                         </AnimatePresence>
                     </div>
 
-                    <Orb
-                        state={copilotStatus === 'disconnected' ? 'idle' : copilotStatus === 'connected' ? 'idle' : copilotStatus}
-                        onClick={toggleListening}
-                    />
+                    {!isE2EMode && (
+                        <Orb
+                            state={copilotStatus === 'disconnected' ? 'idle' : copilotStatus === 'connected' ? 'idle' : copilotStatus}
+                            onClick={toggleListening}
+                        />
+                    )}
 
                 </main>
             </div>

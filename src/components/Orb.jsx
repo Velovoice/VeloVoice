@@ -3,6 +3,11 @@ import React, { useRef, useEffect } from 'react';
 export default function Orb({ state, onClick }) {
     const canvasRef = useRef(null);
 
+    const getOrbSize = () => {
+        const shortest = Math.min(window.innerWidth, window.innerHeight);
+        return Math.max(84, Math.min(120, Math.floor(shortest * 0.12)));
+    };
+
     useEffect(() => {
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
@@ -140,24 +145,14 @@ export default function Orb({ state, onClick }) {
     }, [state]);
 
     const containerStyle = {
-        position: 'absolute',
-        bottom: '32px',
-        right: '32px',
-        width: '100px',
-        height: '100px',
-        borderRadius: '50%',
-        cursor: 'pointer',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 100,
-        background: 'radial-gradient(circle at center, rgba(0,0,0,0.4) 0%, transparent 70%)',
-        transition: 'all 0.3s ease',
+        width: `${getOrbSize()}px`,
+        height: `${getOrbSize()}px`,
     };
 
     return (
         <div
             onClick={onClick}
+            className="orb-container"
             style={containerStyle}
             title="Tap to toggle AI state (Listening/Idle)"
         >

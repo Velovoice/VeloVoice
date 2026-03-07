@@ -5,7 +5,24 @@ import WeatherWidget from '../components/WeatherWidget';
 import useVehicleStore from '../store/useVehicleStore';
 
 export default function DashboardView() {
-    const { mapCenter, destination, isNavigating, nextStep, lastAlert, alertType, media, updateMedia } = useVehicleStore();
+    const {
+        mapCenter,
+        destination,
+        isNavigating,
+        nextStep,
+        lastAlert,
+        alertType,
+        media,
+        updateMedia,
+        connection,
+        telemetryMeta,
+        isLimitedMode
+    } = useVehicleStore();
+
+    const showLimited = isLimitedMode();
+    const showStale = telemetryMeta.isTelemetryStale;
+    const showDemo = telemetryMeta.telemetrySource === 'demo';
+    const showConnected = connection.state === 'connected' || connection.state === 'degraded';
 
     const alertColors = {
         info: '#34C759',
@@ -26,10 +43,17 @@ export default function DashboardView() {
             }}>
                 <MapView center={mapCenter} />
 
+                <div className="status-chip-row dashboard-chip-stack">
+                    {showConnected && <span className="status-chip status-chip-connected">Connected</span>}
+                    {showLimited && <span className="status-chip status-chip-limited">Limited Mode</span>}
+                    {showStale && <span className="status-chip status-chip-stale">Telemetry Stale</span>}
+                    {showDemo && <span className="status-chip status-chip-demo">Demo Data</span>}
+                </div>
+
                 {/* Navigation Overlays - Only show if actively navigating */}
                 {isNavigating && (
                     <>
-                        <div style={{ position: 'absolute', top: 16, left: 16, background: 'var(--surface-primary)', borderRadius: 'var(--border-radius-sm)', padding: '12px 16px', display: 'flex', gap: '16px', alignItems: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.4)', zIndex: 10 }}>
+                        <div style={{ position: 'absolute', top: 16, left: 16, background: 'var(--surface-primary)', borderRadius: 'var(--border-radius-sm)', padding: '12px 16px', display: 'flex', gap: '16px', alignItems: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.4)', zIndex: 'var(--z-dashboard-overlay)', maxWidth: 'min(72%, 460px)' }}>
                             <div style={{ background: 'var(--accent-color)', padding: '10px', borderRadius: '10px' }}>
                                 <Navigation size={22} color="#fff" />
                             </div>
@@ -44,19 +68,7 @@ export default function DashboardView() {
                         </div>
 
                         {/* Status Ticker for Traffic/Alerts */}
-                        <div style={{
-                            position: 'absolute',
-                            top: 80,
-                            left: 16,
-                            right: 16,
-                            background: 'rgba(28,28,30,0.9)',
-                            borderRadius: '12px',
-                            padding: '8px 16px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            zIndex: 10,
+                        <div className="dashboard-alert-ticker" style={{
                             opacity: isNavigating ? 1 : 0,
                             transition: 'opacity 0.5s ease'
                         }}>
@@ -67,12 +79,12 @@ export default function DashboardView() {
                                 background: alertColors[alertType] || '#34C759',
                                 boxShadow: `0 0 10px ${alertColors[alertType] || '#34C759'}`
                             }} />
-                            <div style={{ fontSize: '14px', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: '14px', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
                                 {lastAlert || 'System Online • Calculating...'}
                             </div>
                         </div>
 
-                        <div style={{ position: 'absolute', bottom: 16, left: 16, background: 'rgba(28,28,30,0.8)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '8px 12px', fontSize: '14px', color: '#8E8E93', zIndex: 10 }}>
+                        <div style={{ position: 'absolute', bottom: 16, left: 16, background: 'rgba(28,28,30,0.8)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '8px 12px', fontSize: '14px', color: '#8E8E93', zIndex: 'var(--z-dashboard-overlay)' }}>
                             Calculating ETA...
                         </div>
                     </>

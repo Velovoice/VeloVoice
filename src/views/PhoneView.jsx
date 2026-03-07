@@ -14,9 +14,9 @@ export default function PhoneView() {
                 <h2 style={{ fontSize: '28px', margin: 0, fontWeight: '700' }}>Phone</h2>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '24px', flex: 1 }}>
+            <div className="phone-grid">
                 {/* Left Sidebar for Phone App */}
-                <div style={{ background: '#1C1C1E', borderRadius: '20px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="phone-sidebar">
                     {[
                         { icon: Star, label: 'Favorites' },
                         { icon: History, label: 'Recents', active: true },
@@ -37,7 +37,8 @@ export default function PhoneView() {
                                 cursor: 'pointer',
                                 textAlign: 'left',
                                 fontSize: '16px',
-                                fontWeight: item.active ? '600' : '400'
+                                fontWeight: item.active ? '600' : '400',
+                                whiteSpace: 'nowrap'
                             }}
                         >
                             <item.icon size={20} />
@@ -47,7 +48,7 @@ export default function PhoneView() {
                 </div>
 
                 {/* Main Content: Recents List */}
-                <div style={{ background: '#1C1C1E', borderRadius: '20px', padding: '0', overflow: 'hidden' }}>
+                <div className="phone-main">
                     {recents.map((contact, i) => (
                         <div
                             key={i}

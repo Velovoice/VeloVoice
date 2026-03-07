@@ -1,12 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-export function useCoPilot(persona = 'Samantha', language = 'en-US') {
+export function useCoPilot(persona = 'Samantha', language = 'en-US', options = {}) {
     const [status, setStatus] = useState('disconnected'); // disconnected, connected, listening, speaking
     const [messages, setMessages] = useState([]);
     const [actions, setActions] = useState([]);
     const ws = useRef(null);
     const personaRef = useRef(persona);
     const langRef = useRef(language);
+    const optionsRef = useRef(options);
+    const wsUrl = import.meta.env.VITE_BACKEND_WS_URL || 'ws://localhost:3001';
+
+    useEffect(() => {
+        optionsRef.current = options;
+    }, [options]);
 
     // Update refs when props change
     useEffect(() => {
@@ -76,7 +82,7 @@ export function useCoPilot(persona = 'Samantha', language = 'en-US') {
     const connectWebSocket = useCallback(() => {
         if (ws.current && ws.current.readyState === WebSocket.OPEN) return;
 
-        ws.current = new WebSocket('ws://localhost:3001');
+        ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
             console.log('WebSocket connected to Co-Pilot Brain');
@@ -96,10 +102,12 @@ export function useCoPilot(persona = 'Samantha', language = 'en-US') {
                 console.log('Received from Brain:', data);
 
                 if (data.type === 'system_request') {
-                    if (data.action === 'poll_obd') {
-                        // This hook doesn't have direct access to the store to avoid circular deps
-                        // We'll dispatch a custom event that App.jsx or a dedicated bridge can hear
-                        window.dispatchEvent(new CustomEvent('request_telemetry_sync'));
+                    if (typeof optionsRef.current?.onSystemRequest === 'function') {
+                        optionsRef.current.onSystemRequest(data, (payload) => {
+                            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                                ws.current.send(JSON.stringify(payload));
+                            }
+                        });
                     }
                 } else if (data.type === 'ai_response') {
                     setStatus('speaking');
@@ -161,7 +169,7 @@ export function useCoPilot(persona = 'Samantha', language = 'en-US') {
             setStatus('disconnected');
             setTimeout(connectWebSocket, 3000);
         };
-    }, []);
+    }, [wsUrl]);
 
     const toggleListening = useCallback(() => {
         // If currently talking or listening, stop it.

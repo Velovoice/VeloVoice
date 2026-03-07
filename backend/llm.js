@@ -7,9 +7,16 @@ if (!apiKey) {
     console.warn("WARNING: GEMINI_API_KEY is not set. LLM calls will fail.");
 }
 
-const genAI = new GoogleGenerativeAI(apiKey);
+const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
 export async function processVoiceCommand(text, persona = 'Samantha', language = 'en-US') {
+    if (!genAI) {
+        return {
+            text: "I'm having trouble connecting to my network right now. Please try again.",
+            actions: []
+        };
+    }
+
     const model = genAI.getGenerativeModel({
         model: "gemini-2.0-flash",
     });
@@ -154,9 +161,9 @@ export async function processVoiceCommand(text, persona = 'Samantha', language =
 
         return handleLLMResponse(response);
     } catch (error) {
-        console.error("Gemini API Error:", error);
+        console.error("Gemini API Error:", error?.message || 'unknown');
         return {
-            text: "I'm sorry, I'm having trouble connecting to my central network right now.",
+            text: "I'm having trouble connecting to my network right now. Please try again.",
             actions: []
         };
     }
@@ -169,7 +176,7 @@ function handleLLMResponse(response) {
     const calls = response.getFunctionCalls();
     if (calls && calls.length > 0) {
         for (const call of calls) {
-            console.log(`🧠 AI called function: ${call.name} with args:`, call.args);
+            console.log(`🧠 AI called function: ${call.name}`);
             actionsToTake.push({
                 tool: call.name,
                 args: call.args

@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 export default function MapView({ center = [77.5946, 12.9716], zoom = 12 }) {
     const mapContainer = useRef(null);
     const map = useRef(null);
+    const markerScale = Math.max(0.8, Math.min(1.35, window.innerWidth / 1400));
 
     useEffect(() => {
         if (map.current) return; // Initialize only once
@@ -32,10 +33,9 @@ export default function MapView({ center = [77.5946, 12.9716], zoom = 12 }) {
     }, [center]);
 
     return (
-        <div style={{
+        <div className="map-view-shell" style={{
             width: '100%',
             height: '100%',
-            borderRadius: '24px',
             overflow: 'hidden',
             boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
             position: 'relative' // Added for absolute positioning of marker
@@ -43,13 +43,12 @@ export default function MapView({ center = [77.5946, 12.9716], zoom = 12 }) {
             <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
 
             {/* Car Position Marker (Static at center, simulating GPS lock) */}
-            <div style={{
+            <div className="map-center-marker" style={{
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                pointerEvents: 'none',
-                zIndex: 5
+                pointerEvents: 'none'
             }}>
                 {/* Outer Pulse */}
                 <motion.div
@@ -57,19 +56,19 @@ export default function MapView({ center = [77.5946, 12.9716], zoom = 12 }) {
                     transition={{ duration: 2, repeat: Infinity }}
                     style={{
                         position: 'absolute',
-                        width: '40px',
-                        height: '40px',
+                        width: `${40 * markerScale}px`,
+                        height: `${40 * markerScale}px`,
                         background: 'rgba(10, 132, 255, 0.4)',
                         borderRadius: '50%',
                         transform: 'translate(-50%, -50%)',
-                        left: '-20px',
-                        top: '-20px'
+                        left: `${-20 * markerScale}px`,
+                        top: `${-20 * markerScale}px`
                     }}
                 />
                 {/* Inner Core */}
                 <div style={{
-                    width: '16px',
-                    height: '16px',
+                    width: `${16 * markerScale}px`,
+                    height: `${16 * markerScale}px`,
                     background: '#0a84ff',
                     border: '3px solid #fff',
                     borderRadius: '50%',

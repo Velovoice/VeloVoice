@@ -61,7 +61,8 @@ function ParticleCanvas() {
     return (
         <canvas
             ref={canvasRef}
-            style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0.7 }}
+            className="startup-layer-0"
+            style={{ position: 'absolute', inset: 0, opacity: 0.7 }}
         />
     );
 }
@@ -98,6 +99,7 @@ export default function StartupView({ onFinish }) {
 
     return (
         <motion.div
+            className="startup-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, filter: isExiting ? 'blur(20px)' : 'blur(0px)', scale: isExiting ? 1.08 : 1 }}
             transition={{ duration: isExiting ? 0.5 : 0.4, ease: 'easeInOut' }}
@@ -109,7 +111,6 @@ export default function StartupView({ onFinish }) {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                zIndex: 9999,
                 position: 'fixed',
                 inset: 0,
                 overflow: 'hidden'
@@ -119,6 +120,7 @@ export default function StartupView({ onFinish }) {
 
             {/* Radial glow behind logo */}
             <motion.div
+                className="startup-layer-1"
                 animate={{ opacity: showLogo ? 1 : 0, scale: showLogo ? 1 : 0.5 }}
                 transition={{ duration: 1.2, ease: 'easeOut' }}
                 style={{
@@ -126,8 +128,7 @@ export default function StartupView({ onFinish }) {
                     width: '400px',
                     height: '400px',
                     background: 'radial-gradient(circle, rgba(10,132,255,0.15) 0%, transparent 70%)',
-                    borderRadius: '50%',
-                    zIndex: 1
+                    borderRadius: '50%'
                 }}
             />
 
@@ -138,7 +139,8 @@ export default function StartupView({ onFinish }) {
                         initial={{ scale: 0.6, opacity: 0, y: 20 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
                         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                        style={{ position: 'relative', zIndex: 2, marginBottom: '48px' }}
+                        className="startup-layer-2"
+                        style={{ position: 'relative', marginBottom: '48px' }}
                     >
                         <img
                             src={logo}
@@ -189,7 +191,7 @@ export default function StartupView({ onFinish }) {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '10px',
-                zIndex: 2,
+                zIndex: 'var(--z-layer-2)',
                 minWidth: '240px'
             }}>
                 {BOOT_STEPS.map((step) => {
@@ -248,6 +250,7 @@ export default function StartupView({ onFinish }) {
 
             {/* Bottom version tag */}
             <motion.div
+                className="startup-layer-2"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: showLogo ? 0.35 : 0 }}
                 transition={{ delay: 0.8, duration: 1 }}
@@ -258,8 +261,7 @@ export default function StartupView({ onFinish }) {
                     letterSpacing: '3px',
                     textTransform: 'uppercase',
                     color: '#fff',
-                    fontFamily: 'monospace',
-                    zIndex: 2
+                    fontFamily: 'monospace'
                 }}
             >
                 VeloVoice v1.0 · AI Co-Pilot

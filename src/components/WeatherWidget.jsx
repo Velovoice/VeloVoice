@@ -70,7 +70,7 @@ export default function WeatherWidget() {
             {loading ? (
                 <div style={{ color: '#8E8E93', fontSize: '14px', padding: '10px 0' }}>Loading weather data...</div>
             ) : weather ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div className="weather-widget-main">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                         <WeatherIcon size={46} color={details.color} />
                         <div>
@@ -83,7 +83,7 @@ export default function WeatherWidget() {
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '16px', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className="weather-widget-metrics">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#8E8E93' }}>
                             <Wind size={14} />
                             <span>{weather.windSpeed} km/h</span>

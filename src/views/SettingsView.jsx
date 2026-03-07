@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { User, Globe, Shield, ChevronRight, Check, Bluetooth, Activity, Car } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { User, Globe, Shield, ChevronRight, Check, Bluetooth } from 'lucide-react';
 import { bluetoothManager } from '../utils/BluetoothManager';
 import useVehicleStore from '../store/useVehicleStore';
 import VEHICLE_PROFILES from '../data/vehicleProfiles';
@@ -9,9 +9,30 @@ export default function SettingsView() {
         accentColor, setAccentColor,
         aiPersona, setAiPersona,
         language, setLanguage,
-        vehicleProfile
+        demoModeEnabled,
+        setDemoModeEnabled,
+        vehicleProfile,
+        connection,
+        setConnectionState,
+        setConnectionError,
+        setPreferredDevice,
+        setAutoReconnect
     } = useVehicleStore();
-    const [obdStatus, setObdStatus] = useState('disconnected');
+    const [obdStatus, setObdStatus] = useState(connection.state === 'connected' ? 'connected' : 'disconnected');
+
+    useEffect(() => {
+        const mapped = connection.state === 'pairing'
+            ? 'connecting'
+            : (connection.state === 'connected' ? 'connected' : 'disconnected');
+        setObdStatus(mapped);
+    }, [connection.state]);
+
+    useEffect(() => bluetoothManager.subscribeConnection(({ state }) => {
+        const mapped = state === 'connected'
+            ? 'connected'
+            : (state === 'pairing' ? 'connecting' : 'disconnected');
+        setObdStatus(mapped);
+    }), []);
 
     const handleChangeVehicle = () => {
         localStorage.removeItem('vv_vehicle_brand');
@@ -38,12 +59,31 @@ export default function SettingsView() {
     ];
 
     const handleConnectOBD = async () => {
+        if (demoModeEnabled) {
+            setDemoModeEnabled(false);
+        }
+
+        if (obdStatus === 'connected') {
+            await bluetoothManager.disconnect();
+            setObdStatus('disconnected');
+            setConnectionState('disconnected');
+            return;
+        }
+
         setObdStatus('connecting');
+        setConnectionState('pairing');
         try {
             const success = await bluetoothManager.connect();
-            if (success) setObdStatus('connected');
-        } catch (e) {
+            if (success) {
+                setObdStatus('connected');
+                setConnectionState('connected');
+                if (bluetoothManager.device?.id) {
+                    setPreferredDevice(bluetoothManager.device.id);
+                }
+            }
+        } catch (error) {
             setObdStatus('disconnected');
+            setConnectionError(error?.message || 'Bluetooth connection failed');
             alert("Bluetooth connection failed. Ensure your ELM327 device is nearby and discoverable.");
         }
     };
@@ -90,6 +130,14 @@ export default function SettingsView() {
         const [isOpen, setIsOpen] = useState(false);
         const selectedOption = options.find(o => o.value === value) || options[0];
 
+        const onOptionKeyDown = (event, optionValue) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onChange(optionValue);
+                setIsOpen(false);
+            }
+        };
+
         return (
             <div style={{
                 background: '#1C1C1E',
@@ -110,7 +158,10 @@ export default function SettingsView() {
                 </div>
 
                 <div style={{ position: 'relative' }}>
-                    <div
+                    <button
+                        type="button"
+                        aria-haspopup="listbox"
+                        aria-expanded={isOpen}
                         onClick={() => setIsOpen(!isOpen)}
                         style={{
                             background: '#2C2C2E',
@@ -125,21 +176,28 @@ export default function SettingsView() {
                             gap: '8px',
                             boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                             transition: 'all 0.2s',
+                            borderWidth: '1px',
+                            borderStyle: 'solid'
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.background = '#3A3A3C'}
                         onMouseLeave={(e) => e.currentTarget.style.background = '#2C2C2E'}
                     >
                         {selectedOption.label}
                         <ChevronRight size={16} color="#8E8E93" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
-                    </div>
+                    </button>
 
                     {isOpen && (
                         <>
                             <div
-                                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }}
+                                className="settings-dropdown-backdrop"
+                                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
                                 onClick={() => setIsOpen(false)}
                             />
-                            <div style={{
+                            <div
+                                role="listbox"
+                                aria-label={`${label} options`}
+                                className="settings-dropdown-menu"
+                                style={{
                                 position: 'absolute',
                                 top: 'calc(100% + 8px)',
                                 right: 0,
@@ -151,17 +209,20 @@ export default function SettingsView() {
                                 borderRadius: '16px',
                                 boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
                                 overflow: 'hidden',
-                                zIndex: 100,
                                 display: 'flex',
                                 flexDirection: 'column'
                             }}>
                                 {options.map((opt, i) => (
-                                    <div
+                                    <button
+                                        type="button"
+                                        role="option"
+                                        aria-selected={value === opt.value}
                                         key={opt.value}
                                         onClick={() => {
                                             onChange(opt.value);
                                             setIsOpen(false);
                                         }}
+                                        onKeyDown={(event) => onOptionKeyDown(event, opt.value)}
                                         style={{
                                             padding: '12px 16px',
                                             cursor: 'pointer',
@@ -169,7 +230,11 @@ export default function SettingsView() {
                                             color: value === opt.value ? accentColor : '#fff',
                                             fontSize: '15px',
                                             borderBottom: i < options.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                                            transition: 'background 0.2s'
+                                            transition: 'background 0.2s',
+                                            borderLeft: 'none',
+                                            borderRight: 'none',
+                                            borderTop: 'none',
+                                            textAlign: 'left'
                                         }}
                                         onMouseEnter={(e) => {
                                             if (value !== opt.value) e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
@@ -179,7 +244,7 @@ export default function SettingsView() {
                                         }}
                                     >
                                         {opt.label}
-                                    </div>
+                                    </button>
                                 ))}
                             </div>
                         </>
@@ -190,7 +255,7 @@ export default function SettingsView() {
     };
 
     return (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: '32px', overflowY: 'auto', paddingRight: '12px' }}>
+        <div className="settings-root">
             <h2 style={{ fontSize: '34px', margin: 0, fontWeight: '700' }}>Settings</h2>
 
             {/* Vehicle Profile Section */}
@@ -235,6 +300,33 @@ export default function SettingsView() {
                     >
                         Change ↗
                     </button>
+                </div>
+            </section>
+
+            {/* Connectivity Mode */}
+            <section>
+                <div style={{ fontSize: '13px', color: '#8E8E93', textTransform: 'uppercase', marginBottom: '8px', marginLeft: '16px' }}>Connectivity Mode</div>
+                <div style={{
+                    background: '#1C1C1E',
+                    border: '1px solid #2C2C2E',
+                    borderRadius: '16px',
+                    padding: '14px 16px'
+                }}>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                        <div>
+                            <div style={{ fontSize: '15px', fontWeight: '600' }}>Demo Mode</div>
+                            <div style={{ fontSize: '12px', color: '#8E8E93' }}>Use deterministic telemetry for no-hardware demos</div>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={!!demoModeEnabled}
+                            onChange={(e) => setDemoModeEnabled(e.target.checked)}
+                            style={{ width: '18px', height: '18px', accentColor: accentColor }}
+                        />
+                    </label>
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#8E8E93' }}>
+                        Tip: turn this off before using live OBD telemetry.
+                    </div>
                 </div>
             </section>
 
@@ -294,10 +386,45 @@ export default function SettingsView() {
                 <SettingItem
                     icon={Bluetooth}
                     label="OBD-II Bluetooth"
-                    value={obdStatus === 'connected' ? 'Connected to VeloVoice Link' : obdStatus === 'connecting' ? 'Searching...' : 'Not Connected'}
+                    value={obdStatus === 'connected' ? 'Connected (tap to disconnect)' : obdStatus === 'connecting' ? 'Searching...' : 'Not Connected'}
                     active={obdStatus === 'connected'}
                     onClick={handleConnectOBD}
                 />
+
+                <div style={{
+                    background: '#1C1C1E',
+                    border: '1px solid #2C2C2E',
+                    borderRadius: '16px',
+                    padding: '14px 16px',
+                    marginTop: '8px'
+                }}>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                        <div>
+                            <div style={{ fontSize: '15px', fontWeight: '600' }}>Auto reconnect</div>
+                            <div style={{ fontSize: '12px', color: '#8E8E93' }}>Reconnect to your preferred adapter next launch</div>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={!!connection.autoReconnect}
+                            onChange={(e) => setAutoReconnect(e.target.checked)}
+                            style={{ width: '18px', height: '18px', accentColor: accentColor }}
+                        />
+                    </label>
+
+                    <div style={{ marginTop: '12px', fontSize: '12px', color: '#8E8E93' }}>
+                        Preferred adapter: {connection.preferredDeviceId ? connection.preferredDeviceId : 'Not set yet'}
+                    </div>
+
+                    {connection.lastError && (
+                        <div style={{ marginTop: '8px', fontSize: '12px', color: '#FF9500' }}>
+                            Last error: {connection.lastError}
+                        </div>
+                    )}
+
+                    <div style={{ marginTop: '10px', fontSize: '12px', color: '#8E8E93' }}>
+                        Quick fix: keep adapter powered, keep Bluetooth on, and retry from this section.
+                    </div>
+                </div>
             </section>
 
             {/* General Section */}
@@ -305,6 +432,21 @@ export default function SettingsView() {
                 <div style={{ fontSize: '13px', color: '#8E8E93', textTransform: 'uppercase', marginBottom: '8px', marginLeft: '16px' }}>System</div>
                 <SettingItem icon={Globe} label="Language" value="English (US)" />
                 <SettingItem icon={Shield} label="Privacy & Security" />
+
+                <div style={{
+                    marginTop: '8px',
+                    background: '#1C1C1E',
+                    border: '1px solid #2C2C2E',
+                    borderRadius: '16px',
+                    padding: '12px 14px'
+                }}>
+                    <div style={{ fontSize: '13px', color: '#8E8E93', marginBottom: '8px' }}>Feature Availability</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', rowGap: '6px', fontSize: '12px' }}>
+                        <span style={{ color: '#E5E5EA' }}>Voice, Navigation, Media</span><span style={{ color: '#34C759' }}>Always</span>
+                        <span style={{ color: '#E5E5EA' }}>Live Telemetry</span><span style={{ color: '#FF9500' }}>OBD Required</span>
+                        <span style={{ color: '#E5E5EA' }}>Deep Car Controls</span><span style={{ color: '#FF9500' }}>Model Dependent</span>
+                    </div>
+                </div>
             </section>
         </div>
     );

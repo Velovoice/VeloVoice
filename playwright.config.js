@@ -16,11 +16,19 @@ export default defineConfig({
             use: { ...devices['Desktop Chrome'] },
         },
     ],
-    // Start the Vite dev server automatically before E2E tests
-    webServer: {
-        command: 'npm run dev',
-        url: 'http://localhost:5173',
-        reuseExistingServer: true,
-        timeout: 30000,
-    },
+    // Start frontend + backend dev servers automatically before E2E tests.
+    webServer: [
+        {
+            command: 'npm run dev --prefix backend',
+            url: 'http://localhost:3001/health',
+            reuseExistingServer: true,
+            timeout: 30000,
+        },
+        {
+            command: 'npm run dev',
+            url: 'http://localhost:5173',
+            reuseExistingServer: true,
+            timeout: 30000,
+        }
+    ],
 });
